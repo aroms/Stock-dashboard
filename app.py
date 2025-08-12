@@ -4,7 +4,8 @@ import numpy as np
 import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-
+import yfinance as yf
+print(yf.download("AAPL", period="1mo", interval="1d"))
 st.set_page_config(page_title="Stock Analysis Dashboard", layout="wide")
 
 # ------------------------
