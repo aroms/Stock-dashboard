@@ -11,31 +11,48 @@ st.set_page_config(page_title="Stock Analysis Dashboard", layout="wide")
 # ========================
 @st.cache_data(show_spinner=False)
 def load_price_data(ticker, start, end, interval):
-    """
-    Try Yahoo Finance (yfinance). If empty or fails, fall back to Stooq via pandas-datareader.
-    Stooq provides daily data; we resample to weekly/monthly when requested.
-    """
-    # --- 1) Try Yahoo via yfinance ---
-    try:
-        import yfinance as yf
-        data = yf.download(
-            ticker,
-            start=start,
-            end=end,
-            interval=interval,
-            auto_adjust=True,
-            progress=False,
-        )
-        if isinstance(data, pd.DataFrame) and not data.empty:
-            # If multi-index columns (multi-ticker), flatten
-            if isinstance(data.columns, pd.MultiIndex):
-                data.columns = [
-                    "_".join([c for c in col if c]) for col in data.columns
-                ]
-            return data
-    except Exception as e:
-        st.warning(f"Yahoo fetch failed: {e}")
+    import pandas as pd
+    import os
+    from alpha_vantage.timeseries import TimeSeries
 
+    key = os.getenv("ALPHA_VANTAGE_KEY")
+    if not key:
+        st.error("Alpha Vantage API key missing in secrets.")
+        return pd.DataFrame()
+
+    ts = TimeSeries(key=key, output_format="pandas")
+
+    try:
+        if interval == "1d":
+            data, _ = ts.get_daily_adjusted(symbol=ticker, outputsize="full")
+        elif interval == "1wk":
+            data, _ = ts.get_weekly_adjusted(symbol=ticker)
+        elif interval == "1mo":
+            data, _ = ts.get_monthly_adjusted(symbol=ticker)
+        else:
+            st.error("Unsupported interval for Alpha Vantage")
+            return pd.DataFrame()
+
+        # Standardize column names
+        data = data.rename(
+            columns={
+                "1. open": "Open",
+                "2. high": "High",
+                "3. low": "Low",
+                "4. close": "Close",
+                "5. adjusted close": "Adj Close",
+                "6. volume": "Volume",
+            }
+        )
+
+        data.index = pd.to_datetime(data.index)
+        data = data.sort_index()
+        data = data.loc[(data.index >= pd.to_datetime(start)) & (data.index <= pd.to_datetime(end))]
+        return data
+
+    except Exception as e:
+        st.error(f"Alpha Vantage fetch failed: {e}")
+        return pd.DataFrame()
     # --- 2) Fallback to Stooq (no API key) via pandas-datareader ---
     try:
         from pandas_datareader import data as pdr
