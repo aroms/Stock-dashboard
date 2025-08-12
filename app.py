@@ -12,11 +12,19 @@ st.set_page_config(page_title="Stock Analysis Dashboard", layout="wide")
 # ------------------------
 @st.cache_data(show_spinner=False)
 def load_price_data(ticker, start, end, interval):
-    data = yf.download(ticker, start=start, end=end, interval=interval, auto_adjust=True, progress=False)
-    if isinstance(data.columns, pd.MultiIndex):
-        # If multiple tickers were downloaded, pick the first level "Close" etc.
-        data.columns = ['_'.join([c for c in col if c]) for col in data.columns]
-    return data
+    import yfinance as yf
+    tries = 3
+    for _ in range(tries):
+        try:
+            data = yf.download(ticker, start=start, end=end, interval=interval, auto_adjust=True, progress=False)
+            if not data.empty:
+                if isinstance(data.columns, pd.MultiIndex):
+                    data.columns = ['_'.join([c for c in col if c]) for col in data.columns]
+                return data
+        except Exception as e:
+            st.warning(f"Fetch failed: {e}")
+    st.error("Yahoo Finance returned no data — try a smaller period or different interval.")
+    return pd.DataFrame()
 
 def sma(series, window):
     return series.rolling(window).mean()
